@@ -30,8 +30,8 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
     # prim_path = "{ENV_REGEX_NS}/Robot",  # Do not add in the robot config add it in the env config
     spawn = sim_utils.UsdFileCfg(
         usd_path                       = CUSTOM_UNITREE_GO2_USD_PATH,
-        # visible                        = True, # default True
-        # copy_from_source               = True, # default True
+        visible                        = True, # default True
+        copy_from_source               = True, # default True
         rigid_props                    = sim_utils.RigidBodyPropertiesCfg(
             disable_gravity                 = False, # No default value must be False
             linear_damping                  = 0.0,
@@ -43,13 +43,13 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
             solver_position_iteration_count = 8,
             solver_velocity_iteration_count = 0,
         ),
-        # collision_props                = sim_utils.CollisionPropertiesCfg( # Not necessary if the collision is good in robot USD / URDF
-        #     collision_enabled          = True,
-        #     contact_offset             = 0.001,
-        #     rest_offset                = 0.0,
-        #     torsional_patch_radius     = 0.0,
-        #     min_torsional_patch_radius = 0.05
-        # ),
+        collision_props                = sim_utils.CollisionPropertiesCfg( # Not necessary if the collision is good in robot USD / URDF
+            collision_enabled          = True,
+            contact_offset             = 0.001,
+            rest_offset                = 0.0,
+            torsional_patch_radius     = 0.0,
+            min_torsional_patch_radius = 0.05
+        ),
         activate_contact_sensors       = True,             # default False
         # scale                          = (1.0, 1.0, 1.0),  # Use it when the robot's scale is not correct , here the original USD / URDF is correct hence 1.0 for all. If the value is 1.0 it is need not be used
         articulation_props             = sim_utils.ArticulationRootPropertiesCfg( # Always set when it is a robot
@@ -94,7 +94,7 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
     ),
     # collision_group = 0, # default 0 | -1: global collision group (collides with all assets in the scene). | 0: local collision group (collides with other assets in the same environment).
     # debug_vis=True,   # default False | It shows (visually) the data in isaacsim gui
-    # articulation_root_prim_path = None, # None = Isaac Lab finds it automatically or when it has one robot | When TO add it: your USD has multiple robots
+    articulation_root_prim_path = None, # None = Isaac Lab finds it automatically or when it has one robot | When TO add it: your USD has multiple robots
     # example.usd
     # ├── /robot1    ← ArticulationRootAPI here  (go2)
     # └── /robot2    ← ArticulationRootAPI here  (spot)
@@ -106,14 +106,14 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
         #    ".*": 0.0,  # represents all joints
         # },
         joint_pos = {
-            ".*_hip_joint"   : 0.15,   # neutral, feet directly below hips — within [-1.047, 1.047] ✓
-            ".*_thigh_joint" : 0.0,    # thigh tilted forward for standing height — within [-1.571, 3.491] ✓
-            ".*_calf_joint"  : -0.9,   # knee bent to hold body weight — within [-2.723, -0.838] ✓
+            ".*_hip_joint"   : 0.0,    # neutral, feet directly below hips — within [-1.047, 1.047] ✓
+            ".*_thigh_joint" : 0.9,    # thigh tilted forward for standing height — within [-1.571, 3.491] ✓
+            ".*_calf_joint"  : -1.8,   # knee bent to hold body weight — within [-2.723, -0.838] ✓
         },
         # joint_vel = {
         #     ".*": 0.0
         # },
-        pos = (0.0, 0.0, 0.4),
+        # pos = (0.0, 0.0, 0.0),
         # rot = (1.0, 0.0, 0.0, 0.0) # Quaternion rotation (w, x, y, z) of the root in simulation world frame. Defaults to (1.0, 0.0, 0.0, 0.0). # If your robot's USD "forward" direction doesn't match your task's expected forward direction, rotate here instead of editing the USD.
     ),
     soft_joint_pos_limit_factor = 0.9, # default 1.0
@@ -126,8 +126,8 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
             # },
             effort_limit         = 23.7, # If none taken from usd
             velocity_limit       = 30.1,
-            effort_limit_sim     = 23.7,
-            velocity_limit_sim   = 30.1,
+            # effort_limit_sim   = None,
+            # velocity_limit_sim = None,
             stiffness            = 25.0,
             damping              = 0.5,
             armature             = 0.001, # go till 0.0049
@@ -144,8 +144,8 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
             # },
             effort_limit         = 23.7, # If none taken from usd
             velocity_limit       = 30.1,
-            effort_limit_sim     = 23.7,
-            velocity_limit_sim   = 30.1,
+            # effort_limit_sim   = None,
+            # velocity_limit_sim = None,
             stiffness            = 25.0,
             damping              = 0.5,
             armature             = 0.001, # go till 0.0049
@@ -162,8 +162,8 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
             # },
             effort_limit         = 45.43, # If none taken from usd
             velocity_limit       = 15.7,
-            effort_limit_sim     = 45.43,
-            velocity_limit_sim   = 15.7,
+            # effort_limit_sim   = None,
+            # velocity_limit_sim = None,
             stiffness            = 50.0,
             damping              = 1.0,
             armature             = 0.001, # go till 0.0049
@@ -176,6 +176,8 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
     actuator_value_resolution_debug_print = True  # default false | if the value are different in USD and config then Isaac Lab resolves the conflict silently. This flag makes it print exactly what value was used and why.
 
 )
+
+
 
 
 

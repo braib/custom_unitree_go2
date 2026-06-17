@@ -16,8 +16,8 @@ class CustomUnitreeGo2RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     resume = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
-        actor_obs_normalization=True,
-        critic_obs_normalization=True,
+        actor_obs_normalization=False,
+        critic_obs_normalization=False,
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
         activation="elu",
@@ -37,12 +37,11 @@ class CustomUnitreeGo2RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         max_grad_norm=1.0,
     )
 
-
 @configclass
 class CustomUnitreeGo2FlatPPORunnerCfg(CustomUnitreeGo2RoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
-        self.max_iterations = 3000
+        self.max_iterations = 300
         self.experiment_name = "unitree_go2_flat"
         self.policy.actor_hidden_dims = [128, 128, 128]
         self.policy.critic_hidden_dims = [128, 128, 128]

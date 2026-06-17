@@ -31,9 +31,10 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 # Pre-defined configs
 ##
 
-# from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
-from custom_unitree_go2.robots import CUSTOM_UNITREE_GO2_CFG, UNITREE_GO2_CFG
-# from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  
+# from isaaclab_assets.robots.cartpole import CARTPOLE_CFG 
+from custom_unitree_go2.robots import CUSTOM_UNITREE_GO2_CFG
+# from custom_unitree_go2.robots import UNITREE_GO2_CFG as CUSTOM_UNITREE_GO2_CFG
+# from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG as CUSTOM_UNITREE_GO2_CFG
 
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 
@@ -88,6 +89,7 @@ class CustomUnitreeGo2SceneCfg(InteractiveSceneCfg):
 
     # robot
     robot: ArticulationCfg = CUSTOM_UNITREE_GO2_CFG.replace(
+    # robot: ArticulationCfg = UNITREE_GO2_CFG.replace(
         prim_path = "{ENV_REGEX_NS}/Robot"
     )
 
@@ -143,7 +145,7 @@ class CommandsCfg:
         ranges                    = mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x = (-1.0, 1.0),
             lin_vel_y = (-1.0, 1.0),
-            ang_vel_z = (-3.5, 3.5),
+            ang_vel_z = (-1.0, 1.0),
             heading   = (-math.pi, math.pi), # Use only when heading_command is True
         ),
         # goal_vel_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(    # appearance of green arrow above robot showing TARGET velocity in GUI
@@ -161,7 +163,7 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointPositionActionCfg(
+    joint_pos = mdp.JointPositionActionCfg(
         use_default_offset = True,    # default True | When True, Isaac Lab reads the init_state.joint_pos values from your ArticulationCfg and uses them as the zero-point of the action. 
         asset_name        = 'robot',  # robot vairable name in InteractiveSceneCfg
         # debug_vis         = True,    # default False |
@@ -170,8 +172,9 @@ class ActionsCfg:
         #     ".*_thigh_joint" : (-0.8, 0.8), 
         #     ".*_calf_joint"  : (-0.8, 0.8),
         # },
-        joint_names       = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"], # MUST can also write [".*"]
-        scale             = 1.0,   # default 1.0   | can also be dictionary
+        # joint_names       = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"], # MUST | can also write [".*"]
+        joint_names       = [".*"],
+        scale             = 0.5,   # default 1.0   | can also be dictionary
         # offset            = 0.0,   # default 0.0   | can also be dictionary | Since use_default_offset=True, Isaac Lab ignores whatever you write here
         # preserve_order    = False  # default False |  Only set True if you are building a custom action tensor by hand with a specific assumed joint ordering,
     )
@@ -297,14 +300,6 @@ class EventCfg:
                 "pitch": (-0.5, 0.5),
                 "yaw": (-0.5, 0.5),
             },
-            # "velocity_range": {
-            #     "x": (0.0, 0.0),    # ← was (-0.5, 0.5), zero out initially
-            #     "y": (0.0, 0.0),    # ← was (-0.5, 0.5)
-            #     "z": (0.0, 0.0),    # ← was (-0.5, 0.5)
-            #     "roll":  (-0.2, 0.2),  # ← was (-0.5, 0.5), reduce
-            #     "pitch": (-0.2, 0.2),  # ← was (-0.5, 0.5)
-            #     "yaw":   (-0.2, 0.2),  # ← was (-0.5, 0.5)
-            # },
         },
     )
 
@@ -312,7 +307,6 @@ class EventCfg:
         func=mdp.reset_joints_by_scale,
         mode="reset",
         params={
-            # "position_range": (0.5, 1.5),
             "position_range": (0.8, 1.2),
             "velocity_range": (0.0, 0.0),
         },
@@ -331,47 +325,46 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # -- task rewards (positive budget: ~1.625)
+    # -- task
     track_lin_vel_xy_exp = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=1.0,
-        params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+        func=mdp.track_lin_vel_xy_exp, weight=1.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
     track_ang_vel_z_exp = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=0.5,
-        params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+        func=mdp.track_ang_vel_z_exp, weight=0.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
-    feet_air_time = RewTerm(
-        func=mdp.feet_air_time,
-        weight=0.5,                              # ← was 0.125, increase to encourage stepping
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
+    # -- penalties
+    lin_vel_z_l2   = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    ang_vel_xy_l2  = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
+    dof_acc_l2     = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    feet_air_time  = RewTerm(
+        func   = mdp.feet_air_time,
+        weight = 0.125,
+        params = {
+            # "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
+            "sensor_cfg"   : SceneEntityCfg("contact_forces", body_names=".*foot"),
+            "command_name" : "base_velocity",
+            "threshold"    : 0.5,
         },
     )
-
-    # -- penalties (must stay BELOW total positive budget individually)
-    lin_vel_z_l2       = RewTerm(func=mdp.lin_vel_z_l2,      weight=-2.0)
-    ang_vel_xy_l2      = RewTerm(func=mdp.ang_vel_xy_l2,     weight=-0.05)
-    dof_torques_l2     = RewTerm(func=mdp.joint_torques_l2,  weight=-1.0e-5)  # ← was -1e-2
-    dof_acc_l2         = RewTerm(func=mdp.joint_acc_l2,      weight=-2.5e-7)  # ← was -2.5e-5
-    action_rate_l2     = RewTerm(func=mdp.action_rate_l2,    weight=-0.01)    # ← was -0.03
     undesired_contacts = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-2.0,                             # ← was -5.0
+        func   = mdp.undesired_contacts,
+        weight = -1.0,
+        # params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*THIGH"), "threshold": 1.0},
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*thigh", ".*calf"]), "threshold": 1.0},
+        # params = {"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh"), "threshold": 1.0},
     )
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.5) # ← was -5.0
-    dof_pos_limits      = RewTerm(func=mdp.joint_pos_limits,     weight=0.0) # ← was 0.0, now active
+    # -- optional penalties
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
+    dof_pos_limits      = RewTerm(func=mdp.joint_pos_limits, weight=0.0)
 
-    base_contact_penalty = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-10.0,  # large one-shot signal: falling = very bad
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"),
-            "threshold": 1.0,
-        },
-    )
+
+    # base_height = RewTerm(
+    #     func=mdp.base_height_l2,
+    #     weight=-1.0,  # tune this
+    #     params={"target_height": 0.32},
+    # )
 
 @configclass
 class TerminationsCfg:
@@ -391,6 +384,7 @@ class CurriculumCfg:
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
 
+
 ##
 # Environment configuration
 ##
@@ -398,18 +392,18 @@ class CurriculumCfg:
 
 
 @configclass
-class CustomUnitreeGo2RoughEnvCfg(ManagerBasedRLEnvCfg):
+class CustomUnitreeGo2EnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
     scene: CustomUnitreeGo2SceneCfg = CustomUnitreeGo2SceneCfg(num_envs=4096, env_spacing=4.0)
     # Basic settings
-    observations: ObservationsCfg = ObservationsCfg()
-    actions: ActionsCfg = ActionsCfg()
-    commands: CommandsCfg = CommandsCfg()
+    observations: ObservationsCfg   = ObservationsCfg()
+    actions: ActionsCfg             = ActionsCfg()
+    commands: CommandsCfg           = CommandsCfg()
     # MDP settings
-    rewards: RewardsCfg = RewardsCfg()
-    terminations: TerminationsCfg = TerminationsCfg()
-    events: EventCfg = EventCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    rewards: RewardsCfg             = RewardsCfg()
+    terminations: TerminationsCfg   = TerminationsCfg()
+    events: EventCfg                = EventCfg()
+    curriculum: CurriculumCfg       = CurriculumCfg()
 
 
     def __post_init__(self):
@@ -439,33 +433,72 @@ class CustomUnitreeGo2RoughEnvCfg(ManagerBasedRLEnvCfg):
                 self.scene.terrain.terrain_generator.curriculum = False
 
 
+@configclass
+class CustomUnitreeGo2RoughEnvCfg(CustomUnitreeGo2EnvCfg):
+    def __post_init__(self):
+        # post init of parent
+        super().__post_init__()
+
+        # self.scene.robot = CUSTOM_UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        # self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/base"
+        # self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/go2_description/base"
+        # scale down the terrains because the robot is small
+        self.scene.terrain.terrain_generator.sub_terrains["boxes"].grid_height_range = (0.025, 0.1)
+        self.scene.terrain.terrain_generator.sub_terrains["random_rough"].noise_range = (0.01, 0.06)
+        self.scene.terrain.terrain_generator.sub_terrains["random_rough"].noise_step = 0.01
+
+        # reduce action scale
+        self.actions.joint_pos.scale = 0.25
+
+        # event
+        self.events.push_robot = None
+        self.events.add_base_mass.params["mass_distribution_params"] = (-1.0, 3.0)
+        self.events.add_base_mass.params["asset_cfg"].body_names = "base"
+        self.events.base_external_force_torque.params["asset_cfg"].body_names = "base"
+        self.events.reset_robot_joints.params["position_range"] = (1.0, 1.0)
+        self.events.reset_base.params = {
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "velocity_range": {
+                "x": (0.0, 0.0),
+                "y": (0.0, 0.0),
+                "z": (0.0, 0.0),
+                "roll": (0.0, 0.0),
+                "pitch": (0.0, 0.0),
+                "yaw": (0.0, 0.0),
+            },
+        }
+        self.events.base_com = None
+
+        # rewards
+        self.rewards.feet_air_time.params["sensor_cfg"].body_names = ".*_foot"
+        self.rewards.feet_air_time.weight = 0.01
+        self.rewards.undesired_contacts = None
+        self.rewards.dof_torques_l2.weight = -0.0002
+        self.rewards.track_lin_vel_xy_exp.weight = 1.5
+        self.rewards.track_ang_vel_z_exp.weight = 0.75
+        self.rewards.dof_acc_l2.weight = -2.5e-7
+
+        # terminations
+        self.terminations.base_contact.params["sensor_cfg"].body_names = "base"
+
 
 
 
 @configclass
 class CustomUnitreeGo2FlatEnvCfg(CustomUnitreeGo2RoughEnvCfg):
     def __post_init__(self):
+        # post init of parent
         super().__post_init__()
 
-        # flat ground instead of rough terrain
-        self.scene.terrain = TerrainImporterCfg(
-            prim_path="/World/ground",
-            terrain_type="plane",
-            collision_group=-1,
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-            ),
-            debug_vis=False,
-        )
+        # override rewards
+        self.rewards.flat_orientation_l2.weight = -2.5
+        self.rewards.feet_air_time.weight       = 0.25
 
-        # disable height scanner — useless on flat ground
-        self.scene.height_scanner = None
-
-        # disable terrain curriculum — no levels on a plane
-        self.curriculum.terrain_levels = None
-
-        # remove height_scan from observations
-        self.observations.policy.height_scan = None
+        # change terrain to flat
+        self.scene.terrain.terrain_type         = "plane"
+        self.scene.terrain.terrain_generator    = None
+        # no height scan
+        self.scene.height_scanner               = None
+        self.observations.policy.height_scan    = None
+        # no terrain curriculum
+        self.curriculum.terrain_levels          = None
