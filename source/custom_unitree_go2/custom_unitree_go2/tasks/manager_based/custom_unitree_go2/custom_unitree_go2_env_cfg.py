@@ -3,28 +3,39 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+# custom_unitree_go2_env_cfg.py
+
+
 import math
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from . import mdp
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+
 
 ##
 # Pre-defined configs
 ##
 
-from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
+# from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
+from custom_unitree_go2.robots import CUSTOM_UNITREE_GO2_CFG, UNITREE_GO2_CFG
+# from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  
 
+from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 
 ##
 # Scene definition
@@ -36,18 +47,82 @@ class CustomUnitreeGo2SceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
 
     # ground plane
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
+    # ground = AssetBaseCfg(
+    #     prim_path = "/World/ground",
+    #     spawn     = sim_utils.GroundPlaneCfg(size = (100.0, 100.0)),
+    # )
+
+    terrain = TerrainImporterCfg(
+        prim_path              = "/World/ground",
+        terrain_type           = "generator",
+        terrain_generator      = ROUGH_TERRAINS_CFG,
+        max_init_terrain_level = 5,
+        collision_group        = -1,
+        physics_material       = sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode    = "multiply",
+            restitution_combine_mode = "multiply",
+            static_friction          = 1.0,
+            dynamic_friction         = 1.0,
+        ),
+        visual_material        = sim_utils.MdlFileCfg(
+            mdl_path      = f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            project_uvw   = True,
+            texture_scale = (0.25, 0.25),
+        ),
+        debug_vis              = False,
+    )
+
+    # lights
+    # dome_light = AssetBaseCfg(
+    #     prim_path = "/World/DomeLight",
+    #     spawn     = sim_utils.DomeLightCfg(color = (0.9, 0.9, 0.9), intensity = 500.0),
+    # )
+
+    sky_light = AssetBaseCfg(
+        prim_path = "/World/skyLight",
+        spawn     = sim_utils.DomeLightCfg(
+            intensity    = 750.0,
+            texture_file = f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+        ),
     )
 
     # robot
-    robot: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = CUSTOM_UNITREE_GO2_CFG.replace(
+        prim_path = "{ENV_REGEX_NS}/Robot"
+    )
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/DomeLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
+    height_scanner = RayCasterCfg(
+        prim_path       = "{ENV_REGEX_NS}/Robot/go2_description/base", 
+        # prim_path       = "{ENV_REGEX_NS}/Robot/base",  # UNITREE_GO2_CFG has flat structure, no go2_description
+        offset          = RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        ray_alignment   = "yaw",
+        pattern_cfg     = patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+        debug_vis       = False,
+        mesh_prim_paths = ["/World/ground"],
+    )
+
+    contact_forces = ContactSensorCfg(
+        track_pose                      = False, # defaaut False | we dont need where the foot sensor is in space , we only care if its touching anything or not | we might need it for manipulation to track gripper pose 
+        track_contact_points            = False, # default False | records the 3D position of each contact point
+        track_friction_forces           = False, # default False | Records Friction force vectors at each contact point
+        max_contact_data_count_per_prim = 4, # default 4 | Increase only for contact rich environment (rough terrain)
+        prim_path                       = "{ENV_REGEX_NS}/Robot/go2_description/.*", # * which body gets the contact sesor attached
+        # prim_path                       = "{ENV_REGEX_NS}/Robot/.*",  # flat structure
+        update_period                   = 0.0,     # default 0.0 (for every physics step) | how often sensor data updates in seconds
+        history_length                  = 3,       # default 0 | why 3 ncs min 2 is need 1 is buffer  | why not 4 unnecesaty GPU usage
+        debug_vis                       = False,   # default False | shows colour markers at contact points
+        track_air_time                  = True,    # default False | * It is needed for reward function
+        force_threshold                 = 1.0      # default 1.0 | Only change when sensro thinks foot is touching but it isn't
+
+        # filter_prim_paths_expr: list[str] = list(),
+        # leave empty default
+        # When to use filter_prim_paths_expr:
+        # "is hand touching THIS specific cup?"
+        # → filter_prim_paths_expr=["{ENV_REGEX_NS}/Cup"]
+
+        # visualizer_cfg: VisualizationMarkersCfg = CONTACT_SENSOR_MARKER_CFG.replace(prim_path="/Visuals/ContactSensor"),
+        # Leave at default CONTACT_SENSOR_MARKER_CFG
+
     )
 
 
@@ -55,12 +130,77 @@ class CustomUnitreeGo2SceneCfg(InteractiveSceneCfg):
 # MDP settings
 ##
 
+@configclass
+class CommandsCfg:
+    """Command specifications for the MDP."""
+    
+    base_velocity = mdp.UniformVelocityCommandCfg(
+        asset_name                = "robot",   # in CustomUnitreeGo2SceneCfg robot defined variable name
+        heading_command           = True, # default False | two ways to command robot direction | False -> rotate at N rad/s | True -> face this direction
+        heading_control_stiffness = 0.5,  # do not set when heading_command is False | it is kp value for that helps to reduce the heading direction error
+        rel_standing_envs         = 0.02, # 2% of the commands/environments will be to say robot stop and stand still or else robot wont learn to stop
+        rel_heading_envs          = 1.0,  # set it only when heading_command is true | keep it default 1.0 | change it only when ang and lin vel must be tracked
+        ranges                    = mdp.UniformVelocityCommandCfg.Ranges(
+            lin_vel_x = (-1.0, 1.0),
+            lin_vel_y = (-1.0, 1.0),
+            ang_vel_z = (-3.5, 3.5),
+            heading   = (-math.pi, math.pi), # Use only when heading_command is True
+        ),
+        # goal_vel_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(    # appearance of green arrow above robot showing TARGET velocity in GUI
+        #     prim_path="/Visuals/Command/velocity_goal"
+        # ), # Never touch this not necessary # if needed | from isaaclab.markers import VisualizationMarkersCfg
+        # current_vel_visualizer_cfg: VisualizationMarkersCfg = BLUE_ARROW_X_MARKER_CFG.replace( # appearance of blue arrow above robot showing ACTUAL velocity in GUI
+        #     prim_path="/Visuals/Command/velocity_current"
+        # ),
+        resampling_time_range = (10.0, 10.0),  # default 10 seconds |  how often a new random command is picked
+        debug_vis =  True # Defaults to False |  shows velocity arrows above robots in GUI
+    )
+
 
 @configclass
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+    joint_effort = mdp.JointPositionActionCfg(
+        use_default_offset = True,    # default True | When True, Isaac Lab reads the init_state.joint_pos values from your ArticulationCfg and uses them as the zero-point of the action. 
+        asset_name        = 'robot',  # robot vairable name in InteractiveSceneCfg
+        # debug_vis         = True,    # default False |
+        # clip              = {                   # Skip when u have soft_joint_pos_limit_factor in robot_config
+        #     ".*_hip_joint"   : (-0.5, 0.5),     # Maximum angle the action can command ig
+        #     ".*_thigh_joint" : (-0.8, 0.8), 
+        #     ".*_calf_joint"  : (-0.8, 0.8),
+        # },
+        joint_names       = [".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"], # MUST can also write [".*"]
+        scale             = 1.0,   # default 1.0   | can also be dictionary
+        # offset            = 0.0,   # default 0.0   | can also be dictionary | Since use_default_offset=True, Isaac Lab ignores whatever you write here
+        # preserve_order    = False  # default False |  Only set True if you are building a custom action tensor by hand with a specific assumed joint ordering,
+    )
+
+
+# @configclass
+# class ObservationsCfg:
+#     """Observation specifications for the MDP."""
+
+#     @configclass
+#     class PolicyCfg(ObsGroup):
+#         """Observations for policy group."""
+
+
+#         def __post_init__(self) -> None:
+#             pass
+
+#     @configclass
+#     class CriticCfg(ObsGroup):
+#         """Observations for critic group."""
+
+
+#         def __post_init__(self) -> None:
+#             pass
+
+#     # observation groups
+#     policy: PolicyCfg = PolicyCfg()
+#     critic: CriticCfg = CriticCfg()
+
 
 
 @configclass
@@ -72,11 +212,25 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
+        projected_gravity = ObsTerm(
+            func=mdp.projected_gravity,
+            noise=Unoise(n_min=-0.05, n_max=0.05),
+        )
+        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
+        actions = ObsTerm(func=mdp.last_action)
+        height_scan = ObsTerm(
+            func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            noise=Unoise(n_min=-0.1, n_max=0.1),
+            clip=(-1.0, 1.0),
+        )
 
-        def __post_init__(self) -> None:
-            self.enable_corruption = False
+        def __post_init__(self):
+            self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
@@ -87,25 +241,89 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    # reset
-    reset_cart_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
+    # startup
+    physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]),
-            "position_range": (-1.0, 1.0),
-            "velocity_range": (-0.5, 0.5),
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "static_friction_range": (0.8, 0.8),
+            "dynamic_friction_range": (0.6, 0.6),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 64,
         },
     )
 
-    reset_pole_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
+    add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            "mass_distribution_params": (-5.0, 5.0),
+            "operation": "add",
+        },
+    )
+
+    base_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            "com_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.01, 0.01)},
+        },
+    )
+
+    # reset
+    base_external_force_torque = EventTerm(
+        func=mdp.apply_external_force_torque,
         mode="reset",
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
-            "position_range": (-0.25 * math.pi, 0.25 * math.pi),
-            "velocity_range": (-0.25 * math.pi, 0.25 * math.pi),
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            "force_range": (0.0, 0.0),
+            "torque_range": (-0.0, 0.0),
         },
+    )
+
+    reset_base = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "velocity_range": {
+                "x": (-0.5, 0.5),
+                "y": (-0.5, 0.5),
+                "z": (-0.5, 0.5),
+                "roll": (-0.5, 0.5),
+                "pitch": (-0.5, 0.5),
+                "yaw": (-0.5, 0.5),
+            },
+            # "velocity_range": {
+            #     "x": (0.0, 0.0),    # ← was (-0.5, 0.5), zero out initially
+            #     "y": (0.0, 0.0),    # ← was (-0.5, 0.5)
+            #     "z": (0.0, 0.0),    # ← was (-0.5, 0.5)
+            #     "roll":  (-0.2, 0.2),  # ← was (-0.5, 0.5), reduce
+            #     "pitch": (-0.2, 0.2),  # ← was (-0.5, 0.5)
+            #     "yaw":   (-0.2, 0.2),  # ← was (-0.5, 0.5)
+            # },
+        },
+    )
+
+    reset_robot_joints = EventTerm(
+        func=mdp.reset_joints_by_scale,
+        mode="reset",
+        params={
+            # "position_range": (0.5, 1.5),
+            "position_range": (0.8, 1.2),
+            "velocity_range": (0.0, 0.0),
+        },
+    )
+
+    # interval
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(10.0, 15.0),
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
     )
 
 
@@ -113,41 +331,64 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # (1) Constant running reward
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
-    # (3) Primary task: keep pole upright
-    pole_pos = RewTerm(
-        func=mdp.joint_pos_target_l2,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]), "target": 0.0},
+    # -- task rewards (positive budget: ~1.625)
+    track_lin_vel_xy_exp = RewTerm(
+        func=mdp.track_lin_vel_xy_exp, weight=1.0,
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
-    # (4) Shaping tasks: lower cart velocity
-    cart_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.01,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"])},
+    track_ang_vel_z_exp = RewTerm(
+        func=mdp.track_ang_vel_z_exp, weight=0.5,
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
-    # (5) Shaping tasks: lower pole angular velocity
-    pole_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.005,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
+    feet_air_time = RewTerm(
+        func=mdp.feet_air_time,
+        weight=0.5,                              # ← was 0.125, increase to encourage stepping
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*foot"),
+            "command_name": "base_velocity",
+            "threshold": 0.5,
+        },
     )
 
+    # -- penalties (must stay BELOW total positive budget individually)
+    lin_vel_z_l2       = RewTerm(func=mdp.lin_vel_z_l2,      weight=-2.0)
+    ang_vel_xy_l2      = RewTerm(func=mdp.ang_vel_xy_l2,     weight=-0.05)
+    dof_torques_l2     = RewTerm(func=mdp.joint_torques_l2,  weight=-1.0e-5)  # ← was -1e-2
+    dof_acc_l2         = RewTerm(func=mdp.joint_acc_l2,      weight=-2.5e-7)  # ← was -2.5e-5
+    action_rate_l2     = RewTerm(func=mdp.action_rate_l2,    weight=-0.01)    # ← was -0.03
+    undesired_contacts = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,                             # ← was -5.0
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*thigh", ".*calf"]), "threshold": 1.0},
+    )
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.5) # ← was -5.0
+    dof_pos_limits      = RewTerm(func=mdp.joint_pos_limits,     weight=0.0) # ← was 0.0, now active
+
+    base_contact_penalty = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-10.0,  # large one-shot signal: falling = very bad
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"),
+            "threshold": 1.0,
+        },
+    )
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # (1) Time out
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # (2) Cart out of bounds
-    cart_out_of_bounds = DoneTerm(
-        func=mdp.joint_pos_out_of_manual_limit,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
+    base_contact = DoneTerm(
+        func=mdp.illegal_contact,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
     )
+
+
+@configclass
+class CurriculumCfg:
+    """Curriculum terms for the MDP."""
+
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
 
 ##
@@ -155,26 +396,76 @@ class TerminationsCfg:
 ##
 
 
+
 @configclass
-class CustomUnitreeGo2EnvCfg(ManagerBasedRLEnvCfg):
+class CustomUnitreeGo2RoughEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
     scene: CustomUnitreeGo2SceneCfg = CustomUnitreeGo2SceneCfg(num_envs=4096, env_spacing=4.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
-    events: EventCfg = EventCfg()
+    commands: CommandsCfg = CommandsCfg()
     # MDP settings
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
-    # Post initialization
-    def __post_init__(self) -> None:
+
+    def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 2
-        self.episode_length_s = 5
-        # viewer settings
-        self.viewer.eye = (8.0, 0.0, 5.0)
+        self.decimation = 4
+        self.episode_length_s = 20.0
         # simulation settings
-        self.sim.dt = 1 / 120
+        self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
+        self.sim.physics_material = self.scene.terrain.physics_material
+        self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+        # update sensor update periods
+        # we tick all the sensors based on the smallest update period (physics update period)
+        if self.scene.height_scanner is not None:
+            self.scene.height_scanner.update_period = self.decimation * self.sim.dt
+        if self.scene.contact_forces is not None:
+            self.scene.contact_forces.update_period = self.sim.dt
+
+        # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
+        # this generates terrains with increasing difficulty and is useful for training
+        if getattr(self.curriculum, "terrain_levels", None) is not None:
+            if self.scene.terrain.terrain_generator is not None:
+                self.scene.terrain.terrain_generator.curriculum = True
+        else:
+            if self.scene.terrain.terrain_generator is not None:
+                self.scene.terrain.terrain_generator.curriculum = False
+
+
+
+
+
+@configclass
+class CustomUnitreeGo2FlatEnvCfg(CustomUnitreeGo2RoughEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+
+        # flat ground instead of rough terrain
+        self.scene.terrain = TerrainImporterCfg(
+            prim_path="/World/ground",
+            terrain_type="plane",
+            collision_group=-1,
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.0,
+                dynamic_friction=1.0,
+            ),
+            debug_vis=False,
+        )
+
+        # disable height scanner — useless on flat ground
+        self.scene.height_scanner = None
+
+        # disable terrain curriculum — no levels on a plane
+        self.curriculum.terrain_levels = None
+
+        # remove height_scan from observations
+        self.observations.policy.height_scan = None

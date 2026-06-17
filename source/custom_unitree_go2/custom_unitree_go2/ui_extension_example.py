@@ -3,6 +3,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+# ui_extension_example.py
+
 import omni.ext
 
 
