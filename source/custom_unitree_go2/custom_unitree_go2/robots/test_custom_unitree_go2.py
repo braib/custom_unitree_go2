@@ -139,7 +139,7 @@ CUSTOM_UNITREE_GO2_CFG = ArticulationCfg(
         # joint_vel = {
         #     ".*": 0.0
         # },
-        # pos = (0.0, 0.0, 0.0),
+        pos = (0.0, 0.0, 0.35),
         # rot = (1.0, 0.0, 0.0, 0.0) # Quaternion rotation (w, x, y, z) of the root in simulation world frame. Defaults to (1.0, 0.0, 0.0, 0.0). # If your robot's USD "forward" direction doesn't match your task's expected forward direction, rotate here instead of editing the USD.
     ),
     soft_joint_pos_limit_factor = 0.9, # default 1.0
